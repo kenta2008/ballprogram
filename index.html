@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ボール操作ゲーム</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: black;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+            color: white;
+        }
+        #startButton {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            font-size: 20px;
+            background-color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            font-size: 24px;
+        }
+        #gameOver span {
+            font-size: 30px;
+            font-weight: bold;
+        }
+        #leaderboard {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">0.0m</div>
+    <button id="startButton">よねはらりょうすけスタート</button>
+    <div id="gameOver">
+        <p>よねゲームオーバー！</p>
+        <p>あなたの距離: <span id="currentScore">0.0</span>m</p>
+        <p>自己ベスト: <span id="bestScore">0.0</span>m</p>
+        <button onclick="restartGame()">リスタート</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreDiv = document.getElementById("score");
+        const startButton = document.getElementById("startButton");
+        const gameOverDiv = document.getElementById("gameOver");
+        const currentScoreSpan = document.getElementById("currentScore");
+        const bestScoreSpan = document.getElementById("bestScore");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let ball = { x: canvas.width / 2, y: canvas.height / 2, radius: 10, velocityY: 0 };
+        let obstacles = [];
+        let distance = 0;
+        let gameSpeed = 10;
+        let isGameOver = false;
+        let isGameStarted = false;
+        let bestDistance = parseFloat(localStorage.getItem("bestDistance") || 0);
+        let lastObstacleTime = 0;
+
+        function createObstacle() {
+            const gapSize = Math.random() * 100 + 200; // セーフティエリアの幅 (100~200)
+            const yPos = Math.random() * (canvas.height - gapSize);
+            obstacles.push({ x: canvas.width, topY: yPos, bottomY: yPos + gapSize });
+        }
+
+        function updateObstacles() {
+            const now = Date.now();
+            const randomInterval = Math.random() * 1000 + 1100; // ランダム間隔 (0.7秒 ~ 1.7秒)
+
+            if (now - lastObstacleTime > randomInterval) {
+                createObstacle();
+                lastObstacleTime = now;
+            }
+            
+            for (let obs of obstacles) {
+                obs.x -= gameSpeed;
+                if (obs.x + 20 < 0) {
+                    obstacles.shift();
+                }
+            }
+        }
+
+        function checkCollision() {
+            for (let obs of obstacles) {
+                if (
+                    ball.x + ball.radius > obs.x &&
+                    ball.x - ball.radius < obs.x + 20 &&
+                    (ball.y - ball.radius < obs.topY || ball.y + ball.radius > obs.bottomY)
+                ) {
+                    isGameOver = true;
+                }
+            }
+            if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
+                isGameOver = true;
+            }
+        }
+
+        function update() {
+            if (isGameOver || !isGameStarted) return;
+
+            ball.velocityY += 0.5;
+            ball.y += ball.velocityY;
+
+            updateObstacles();
+            checkCollision();
+
+            distance += gameSpeed / 100;
+            scoreDiv.innerText = `${distance.toFixed(1)}m`;
+        }
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = "bull";
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawObstacles() {
+            ctx.fillStyle = "hotpink";
+            for (let obs of obstacles) {
+                ctx.fillRect(obs.x, 0, 20, obs.topY);
+                ctx.fillRect(obs.x, obs.bottomY, 20, canvas.height - obs.bottomY);
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBall();
+            drawObstacles();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (!isGameOver) {
+                requestAnimationFrame(gameLoop);
+            } else {
+                endGame();
+            }
+        }
+
+        function startGame() {
+            isGameStarted = true;
+            startButton.style.display = "none";
+            lastObstacleTime = Date.now();
+            createObstacle();
+            gameLoop();
+        }
+
+        function endGame() {
+            if (distance > bestDistance) {
+                bestDistance = distance;
+                localStorage.setItem("bestDistance", bestDistance);
+            }
+            currentScoreSpan.innerText = distance.toFixed(1);
+            bestScoreSpan.innerText = bestDistance.toFixed(1);
+            gameOverDiv.style.display = "block";
+        }
+
+        function restartGame() {
+            distance = 0;
+            ball.y = canvas.height / 2;
+            ball.velocityY = 0;
+            obstacles = [];
+            isGameOver = false;
+            isGameStarted = true;
+            gameOverDiv.style.display = "none";
+            gameLoop();
+        }
+
+        startButton.addEventListener("click", startGame);
+        document.addEventListener("mousedown", () => {
+            if (isGameStarted && !isGameOver) {
+                ball.velocityY = -10;
+            }
+        });
+    </script>
+</body>
+</html>
